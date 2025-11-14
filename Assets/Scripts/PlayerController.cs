@@ -41,6 +41,8 @@ public class SimpleCharacterController : MonoBehaviour
     {
         //Move the Player
         rb.MovePosition(rb.position + input * moveSpeed * Time.fixedDeltaTime);
+
+  
     }
 
     void Jump()
