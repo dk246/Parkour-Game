@@ -11,6 +11,16 @@ public class Player : Schema
 
     [Type(2, "number")]
     public float z = 0;
+
+
+    [Type(3, "number")]
+    public float rotY = 0;
+
+    [Type(4, "number")]
+    public float rotX = 0;
+
+    [Type(5, "number")]
+    public float rotZ = 0;
 }
 
 public class MyRoomState : Schema
