@@ -21,6 +21,9 @@ public class Player : Schema
 
     [Type(5, "number")]
     public float rotZ = 0;
+
+    [Type(6, "string")]
+    public string name = "Player";
 }
 
 public class MyRoomState : Schema

@@ -10,22 +10,38 @@ public class MenuManager : MonoBehaviour
     public Button createRoomButton;
     public Button joinRoomButton;
     public Button quickPlayButton;
+    public Button nameButton;
     public TextMeshProUGUI statusText;
+
+    public TMP_InputField playerNameInput;
+
+    public GameObject namepanel;
+    public GameObject roompanel;
 
     [Header("Settings")]
     public string gameSceneName = "Game";
 
     void Start()
     {
+        namepanel.SetActive(true);
+        roompanel.SetActive(false);
         // Add button listeners
         createRoomButton.onClick.AddListener(OnCreateRoomClicked);
         joinRoomButton.onClick.AddListener(OnJoinRoomClicked);
         quickPlayButton.onClick.AddListener(OnQuickPlayClicked);
-
+        nameButton.onClick.AddListener(OnInputName);
         // Set default room name
         roomNameInput.text = "Room_" + Random.Range(1000, 9999);
-
+        playerNameInput.text = "Player" + Random.Range(1, 999);
         UpdateStatus("Ready to connect", Color.white);
+    }
+
+    void OnInputName()
+    {
+        PlayerPrefs.SetString("PlayerName", playerNameInput.text);
+        PlayerPrefs.Save();
+        namepanel.SetActive(false);
+        roompanel.SetActive(true); 
     }
 
     void OnCreateRoomClicked()

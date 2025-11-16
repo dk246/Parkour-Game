@@ -1,305 +1,375 @@
-using UnityEngine;
+﻿using UnityEngine;
 using Colyseus;
 using System.Collections.Generic;
-using TMPro.Examples;
+using TMPro;
 
 public class NetworkManager : MonoBehaviour
 {
-    ColyseusClient client;
-    ColyseusRoom<MyRoomState> room;
+    //COLYSEUS CONNECTION
+    ColyseusClient client;                          
+    ColyseusRoom<MyRoomState> room;                
 
-    public GameObject playerPrefab;
+    // PLAYER MANAGEMENT
+    public GameObject playerPrefab;                  
+    Dictionary<string, GameObject> players = new Dictionary<string, GameObject>();  
+    string myPlayerId = "";                          
 
-    Dictionary<string, GameObject> players = new Dictionary<string, GameObject>();
-    Dictionary<string, Vector3> targetPositions = new Dictionary<string, Vector3>();
+    //MOVEMENT SETTINGS 
+    public float smoothSpeed = 15f;                 
+    private float updateRate = 0.05f;                
+    private float nextUpdateTime = 0f;
 
-    string localPlayerId = "";
-    private float sendRate = 0.05f;
-    private float nextSendTime = 0f;
-    public float interpolationSpeed = 15f;
 
     async void Start()
     {
         Application.runInBackground = true;
-
         client = new ColyseusClient("ws://localhost:2567");
 
         try
         {
-            // Check if we're coming from menu with room info
-            string roomId = PlayerPrefs.GetString("RoomId", "");
+            // ✅ GET NAME FIRST (before joining)
+            string myName = PlayerPrefs.GetString("PlayerName", "Player");
 
-            if (!string.IsNullOrEmpty(roomId))
+            // ✅ CREATE OPTIONS WITH NAME
+            var options = new Dictionary<string, object>
+        {
+            { "name", myName }
+        };
+
+            string roomToJoin = PlayerPrefs.GetString("RoomId", "");
+
+            if (!string.IsNullOrEmpty(roomToJoin))
             {
-                // Try to join the specific room by ID
                 try
                 {
-                    room = await client.JoinById<MyRoomState>(roomId);
-                    Debug.Log("Joined room: " + roomId);
+                    // ✅ PASS OPTIONS WHEN JOINING
+                    room = await client.JoinById<MyRoomState>(roomToJoin, options);
+                    Debug.Log("✓ Joined room: " + roomToJoin);
                 }
                 catch
                 {
-                    // If join by ID fails, just join or create new room
-                    room = await client.JoinOrCreate<MyRoomState>("my_room");
-                    Debug.Log("Room not found, joined/created new room");
+                    // ✅ PASS OPTIONS HERE TOO
+                    room = await client.JoinOrCreate<MyRoomState>("my_room", options);
+                    Debug.Log("✓ Created new room instead");
                 }
             }
             else
             {
-                // No room info, just join or create
-                room = await client.JoinOrCreate<MyRoomState>("my_room");
-                Debug.Log("Joined/Created room from game scene");
+                // ✅ PASS OPTIONS HERE TOO
+                room = await client.JoinOrCreate<MyRoomState>("my_room", options);
+                Debug.Log("✓ Quick play: Joined/Created room");
             }
 
-            localPlayerId = room.SessionId;
-            Debug.Log("Connected! Session ID: " + localPlayerId);
+            myPlayerId = room.SessionId;
+            Debug.Log("My Player ID: " + myPlayerId);
+            Debug.Log("My Name: " + myName);
             Debug.Log("Room ID: " + room.Id);
         }
         catch (System.Exception e)
         {
-            Debug.LogError("Error connecting: " + e.Message);
+            Debug.LogError("✗ Connection failed: " + e.Message);
         }
     }
 
     void Update()
     {
+       
         if (room == null || room.State == null) return;
 
-        // Get all player IDs from the server state
-        List<string> serverPlayerIds = new List<string>();
+        List<string> serverPlayerIds = GetAllPlayerIds();
+
+        SpawnNewPlayers(serverPlayerIds);
+
+        RemoveDisconnectedPlayers(serverPlayerIds);
+
+        SendMyPosition();
+
+        UpdateRemotePlayers(serverPlayerIds);
+    }
+
+    //GET ALL PLAYER IDs FROM SERVER
+    List<string> GetAllPlayerIds()
+    {
+        List<string> ids = new List<string>();
+
         foreach (var key in room.State.players.Keys)
         {
-            serverPlayerIds.Add(key.ToString());
+            ids.Add(key.ToString());
         }
 
-        // Add new players
-        foreach (var playerId in serverPlayerIds)
+        return ids;
+    }
+
+    // SPAWN NEW PLAYERS
+    void SpawnNewPlayers(List<string> serverPlayerIds)
+    {
+        foreach (string playerId in serverPlayerIds)
         {
+            
             if (!players.ContainsKey(playerId))
             {
-                Player player = room.State.players[playerId];
-                OnPlayerAdd(playerId, player);
-            }
-        }
+                Player playerData = room.State.players[playerId];
 
-        // Remove disconnected players
-        List<string> toRemove = new List<string>();
-        foreach (var playerId in players.Keys)
-        {
-            if (!serverPlayerIds.Contains(playerId))
-            {
-                toRemove.Add(playerId);
-            }
-        }
-
-        foreach (var playerId in toRemove)
-        {
-            Debug.Log("Player removed: " + playerId);
-            Destroy(players[playerId]);
-            players.Remove(playerId);
-            targetPositions.Remove(playerId);
-        }
-
-        // Send local player position to server at regular intervals
-        if (players.ContainsKey(localPlayerId) && Time.time >= nextSendTime)
-        {
-            GameObject localPlayer = players[localPlayerId];
-
-            var message = new Dictionary<string, object>
-            {
-                {"x", localPlayer.transform.position.x},
-                {"y", localPlayer.transform.position.y},
-                {"z", localPlayer.transform.position.z}
-            };
-
-            room.Send("updatePosition", message);
-            nextSendTime = Time.time + sendRate;
-        }
-
-        // Update remote player positions and animations
-        foreach (var playerId in serverPlayerIds)
-        {
-            if (playerId != localPlayerId && players.ContainsKey(playerId))
-            {
-                Player player = room.State.players[playerId];
-                Vector3 serverPosition = new Vector3(player.x, player.y, player.z);
-
-                GameObject remotePlayer = players[playerId];
-                Vector3 currentPosition = remotePlayer.transform.position;
-
-                // Calculate movement for animation
-                float horizontalDistance = Vector3.Distance(
-                    new Vector3(currentPosition.x, 0, currentPosition.z),
-                    new Vector3(serverPosition.x, 0, serverPosition.z)
-                );
-
-                bool isMoving = horizontalDistance > 0.02f;
-                bool isJumping = Mathf.Abs(serverPosition.y - currentPosition.y) > 0.1f;
-
-                // Update animator
-                Animator animator = remotePlayer.GetComponent<Animator>();
-                if (animator != null)
-                {
-                    animator.SetBool("isWalk", isMoving);
-                    animator.SetBool("isJump", isJumping || serverPosition.y > 0.6f);
-                }
-
-                // Smoothly move to target position
-                remotePlayer.transform.position = Vector3.Lerp(
-                    currentPosition,
-                    serverPosition,
-                    Time.deltaTime * interpolationSpeed
-                );
-
-                // Rotate towards movement direction
-                if (isMoving)
-                {
-                    Vector3 direction = (serverPosition - currentPosition).normalized;
-                    direction.y = 0;
-                    if (direction != Vector3.zero)
-                    {
-                        Quaternion targetRotation = Quaternion.LookRotation(direction);
-                        remotePlayer.transform.rotation = Quaternion.Slerp(
-                            remotePlayer.transform.rotation,
-                            targetRotation,
-                            Time.deltaTime * interpolationSpeed
-                        );
-                    }
-                }
+                CreatePlayerCharacter(playerId, playerData);
             }
         }
     }
 
-    void OnPlayerAdd(string key, Player player)
+    //REMOVE DISCONNECTED PLAYERS
+    void RemoveDisconnectedPlayers(List<string> serverPlayerIds)
     {
-        Debug.Log("Player added: " + key);
+        
+        List<string> playersToRemove = new List<string>();
 
-        // Calculate spawn position based on player count
-        Vector3 spawnPosition = GetSpawnPosition();
-
-        // Override the player position from server with our spawn position
-        GameObject playerObj = Instantiate(playerPrefab, spawnPosition, Quaternion.identity);
-        players[key] = playerObj;
-
-        if (key == localPlayerId)
+        foreach (string playerId in players.Keys)
         {
-            // Local player - keep all components enabled
-            Debug.Log("Local player spawned at: " + spawnPosition);
-
-            // TAG THE LOCAL PLAYER
-            playerObj.tag = "Player";
-
-            // Tell camera to follow this player
-            CameraController cam = Camera.main.GetComponent<CameraController>();
-            if (cam != null)
+            if (!serverPlayerIds.Contains(playerId))
             {
-                cam.target = playerObj.transform;
+                playersToRemove.Add(playerId);
             }
+        }
 
-            // Send initial spawn position to server
-            var message = new Dictionary<string, object>
+        // Remove each disconnected player
+        foreach (string playerId in playersToRemove)
         {
-            {"x", spawnPosition.x},
-            {"y", spawnPosition.y},
-            {"z", spawnPosition.z}
-        };
-            room.Send("updatePosition", message);
+            Debug.Log("Player disconnected: " + playerId);
+            Destroy(players[playerId]);
+            players.Remove(playerId);
+        }
+    }
 
-            // Color local player green
-            Renderer[] renderers = playerObj.GetComponentsInChildren<Renderer>();
-            foreach (var renderer in renderers)
+    // SEND MY POSITION TO SERVER
+    void SendMyPosition()
+    {        
+        if (Time.time < nextUpdateTime) return;
+
+        if (!players.ContainsKey(myPlayerId)) return;
+
+        GameObject myPlayer = players[myPlayerId];
+        Vector3 myPosition = myPlayer.transform.position;
+
+        var positionMessage = new Dictionary<string, object>
+        {
+            {"x", myPosition.x},
+            {"y", myPosition.y},
+            {"z", myPosition.z}
+        };
+
+        room.Send("updatePosition", positionMessage);
+
+        nextUpdateTime = Time.time + updateRate;
+    }
+
+    // UPDATE OTHER PLAYERS' POSITIONS
+    void UpdateRemotePlayers(List<string> serverPlayerIds)
+    {
+        foreach (string playerId in serverPlayerIds)
+        {  
+            if (playerId == myPlayerId) continue;
+ 
+            if (!players.ContainsKey(playerId)) continue;
+
+            Player serverData = room.State.players[playerId];
+            Vector3 targetPosition = new Vector3(serverData.x, serverData.y, serverData.z);
+
+            GameObject remotePlayer = players[playerId];
+            Vector3 currentPosition = remotePlayer.transform.position;
+
+            bool isMoving = IsPlayerMoving(currentPosition, targetPosition);
+            bool isJumping = IsPlayerJumping(currentPosition, targetPosition);
+
+            UpdatePlayerAnimation(remotePlayer, isMoving, isJumping);
+
+            MovePlayerSmoothly(remotePlayer, currentPosition, targetPosition, isMoving);
+        }
+    }
+
+    // CHECK IF PLAYER IS MOVING
+    bool IsPlayerMoving(Vector3 current, Vector3 target)
+    {
+
+        float horizontalDistance = Vector3.Distance(
+            new Vector3(current.x, 0, current.z),
+            new Vector3(target.x, 0, target.z)
+        );
+
+        return horizontalDistance > 0.02f;  
+    }
+
+    bool IsPlayerJumping(Vector3 current, Vector3 target)
+    {
+
+        float verticalDistance = Mathf.Abs(target.y - current.y);
+        bool isInAir = target.y > 0.6f;  
+
+        return verticalDistance > 0.1f || isInAir;
+    }
+
+    // UPDATE PLAYER ANIMATION
+    void UpdatePlayerAnimation(GameObject player, bool isMoving, bool isJumping)
+    {
+        Animator animator = player.GetComponent<Animator>();
+        if (animator != null)
+        {
+            animator.SetBool("isWalk", isMoving);
+            animator.SetBool("isJump", isJumping);
+        }
+    }
+
+    // MOVE PLAYER SMOOTHLY
+    void MovePlayerSmoothly(GameObject player, Vector3 from, Vector3 to, bool isMoving)
+    {
+
+        player.transform.position = Vector3.Lerp(from, to, Time.deltaTime * smoothSpeed);
+
+        if (isMoving)
+        {
+            Vector3 direction = (to - from).normalized;
+            direction.y = 0;  
+
+            if (direction != Vector3.zero)
             {
-                renderer.material.color = Color.green;
+                Quaternion targetRotation = Quaternion.LookRotation(direction);
+                player.transform.rotation = Quaternion.Slerp(
+                    player.transform.rotation,
+                    targetRotation,
+                    Time.deltaTime * smoothSpeed
+                );
+            }
+        }
+    }
+
+    // CREATE PLAYER CHARACTER
+    void CreatePlayerCharacter(string playerId, Player playerData)
+    {
+        Debug.Log("Spawning player: " + playerId);
+        Debug.Log("Player name from server: " + playerData.name);  // ✅ ADD THIS
+        Vector3 spawnPosition = CalculateSpawnPosition();
+
+        GameObject newPlayer = Instantiate(playerPrefab, spawnPosition, Quaternion.identity);
+        players[playerId] = newPlayer;
+
+        if (playerId == myPlayerId)
+        {
+            SetupLocalPlayer(newPlayer, spawnPosition);
+        }
+        else
+        {
+            Debug.Log("Setting remote player name to: " + playerData.name);  // ✅ ADD THIS
+            SetupRemotePlayer(newPlayer, playerData.name);
+        }
+    }
+
+    // SETUP MY LOCAL PLAYER
+    void SetupLocalPlayer(GameObject player, Vector3 position)
+    {
+        Debug.Log("This is MY player!");
+
+        player.tag = "Player";
+
+        CameraController camera = Camera.main.GetComponent<CameraController>();
+        if (camera != null)
+        {
+            camera.target = player.transform;
+        }
+
+        var message = new Dictionary<string, object>
+        {
+            {"x", position.x},
+            {"y", position.y},
+            {"z", position.z}
+        };
+        room.Send("updatePosition", message);
+
+        string myName = PlayerPrefs.GetString("PlayerName", "Player");
+        SetPlayerName(player, myName, true); 
+    }
+
+    // ===== HELPER: SET PLAYER NAME =====
+    void SetPlayerName(GameObject player, string playerName, bool isLocal)
+    {
+        // Find the 3D text in the player
+        TextMeshPro nameText = player.GetComponentInChildren<TextMeshPro>();
+
+        if (nameText != null)
+        {
+            nameText.text = playerName;
+
+            // Set rotation based on player type
+            if (isLocal)
+            {
+                // Local player: rotation.y = 0
+                nameText.transform.localRotation = Quaternion.Euler(0, 0, 0);
+                Debug.Log("Set LOCAL name: " + playerName + " (rotation.y = 0)");
+            }
+            else
+            {
+                // Remote player: rotation.y = 180
+                nameText.transform.localRotation = Quaternion.Euler(0, 180, 0);
+                Debug.Log("Set REMOTE name: " + playerName + " (rotation.y = 180)");
             }
         }
         else
         {
-            // Remote player - disable movement script but keep animator and rigidbody
-            Debug.Log("Remote player spawned at: " + spawnPosition);
-
-            // REMOVE TAG FROM REMOTE PLAYERS
-            playerObj.tag = "Untagged";
-
-            // Disable the SimpleCharacterController
-            SimpleCharacterController controller = playerObj.GetComponent<SimpleCharacterController>();
-            if (controller != null)
-            {
-                controller.enabled = false;
-            }
-
-            // Keep Animator enabled
-            Animator animator = playerObj.GetComponent<Animator>();
-            if (animator != null)
-            {
-                animator.enabled = true;
-            }
-
-            // Make rigidbody kinematic for remote players (no physics)
-            Rigidbody rb = playerObj.GetComponent<Rigidbody>();
-            if (rb != null)
-            {
-                rb.isKinematic = true;
-                rb.useGravity = false;
-            }
-
-            // Color remote player red
-            Renderer[] renderers = playerObj.GetComponentsInChildren<Renderer>();
-            foreach (var renderer in renderers)
-            {
-                renderer.material.color = Color.red;
-            }
+            Debug.LogWarning("No TextMeshPro found on player!");
         }
     }
 
-    // Method to calculate spawn positions
-    Vector3 GetSpawnPosition()
+    //SETUP OTHER PLAYERS
+    // ✨ ADD playerName PARAMETER ✨
+    void SetupRemotePlayer(GameObject player, string playerName)
     {
-        // Option 1: Circle formation
+        Debug.Log("This is another player: " + playerName);
+        player.tag = "Untagged";
+
+        SimpleCharacterController controller = player.GetComponent<SimpleCharacterController>();
+        if (controller != null)
+        {
+            controller.enabled = false;
+        }
+
+        Animator animator = player.GetComponent<Animator>();
+        if (animator != null)
+        {
+            animator.enabled = true;
+        }
+
+        Rigidbody rb = player.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.isKinematic = true;
+            rb.useGravity = false;
+        }
+
+        
+
+        // ✨ USE THE REAL NAME FROM SERVER ✨
+        SetPlayerName(player, playerName, false);
+    }
+
+
+
+
+    Vector3 CalculateSpawnPosition()
+    {
+       
         int playerCount = players.Count;
-        float angle = playerCount * 45f; // 45 degrees apart
-        float radius = 5f;
+        float angle = playerCount * 45f;  
+        float radius = 5f;                
 
         float x = Mathf.Cos(angle * Mathf.Deg2Rad) * radius;
         float z = Mathf.Sin(angle * Mathf.Deg2Rad) * radius;
 
-        return new Vector3(x, 1f, z); // Y=1 to spawn above ground
-
-        // Option 2: Grid formation (uncomment to use)
-        // int playerCount = players.Count;
-        // int gridSize = 3; // 3x3 grid
-        // float spacing = 3f;
-        // 
-        // int row = playerCount / gridSize;
-        // int col = playerCount % gridSize;
-        // 
-        // float x = (col - gridSize / 2) * spacing;
-        // float z = (row - gridSize / 2) * spacing;
-        // 
-        // return new Vector3(x, 1f, z);
-
-        // Option 3: Random position (uncomment to use)
-        // float randomX = Random.Range(-10f, 10f);
-        // float randomZ = Random.Range(-10f, 10f);
-        // return new Vector3(randomX, 1f, randomZ);
+        return new Vector3(x, 1f, z);  
     }
 
-    public bool IsLocalPlayer(GameObject playerObj)
-    {
-        foreach (var kvp in players)
-        {
-            if (kvp.Value == playerObj && kvp.Key == localPlayerId)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
+    // DISCONNECT WHEN QUITTING
     async void OnApplicationQuit()
     {
         if (room != null)
         {
             await room.Leave();
+            Debug.Log("Disconnected from room");
         }
     }
 }

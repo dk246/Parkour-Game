@@ -91,11 +91,15 @@ public class SimpleCharacterController : MonoBehaviour
 
     private void OnCollisionEnter(Collision collision)
     {
-        // When player touches the ground (check collision normal to avoid walls)
-        if (collision.contacts.Length > 0 && collision.contacts[0].normal.y > 0.5f)
+        if(collision.gameObject.tag == "ground")
         {
-            isGrounded = true;
-            if (animator != null) animator.SetBool("isJump", false);
+            // When player touches the ground (check collision normal to avoid walls)
+            if (collision.contacts.Length > 0 && collision.contacts[0].normal.y > 0.5f)
+            {
+                isGrounded = true;
+                if (animator != null) animator.SetBool("isJump", false);
+            }
         }
+
     }
 }
