@@ -23,51 +23,43 @@ public class NetworkManager : MonoBehaviour
     async void Start()
     {
         Application.runInBackground = true;
-        client = new ColyseusClient("ws://localhost:2567");
+        client = new ColyseusClient("wss://serverofcolyseus-production-c543.up.railway.app");
 
         try
         {
-            // ✅ GET NAME FIRST (before joining)
+            // ✅ GET PLAYER NAME AND ROOM NAME
             string myName = PlayerPrefs.GetString("PlayerName", "Player");
+            string roomName = PlayerPrefs.GetString("RoomId", "");
+            string joinMode = PlayerPrefs.GetString("JoinMode", "quickplay");
 
-            // ✅ CREATE OPTIONS WITH NAME
+            Debug.Log($"=== CONNECTION INFO ===");
+            Debug.Log($"Player Name: {myName}");
+            Debug.Log($"Room Name: {roomName}");
+            Debug.Log($"Join Mode: {joinMode}");
+
+            // ✅ CREATE OPTIONS WITH CUSTOM ROOM NAME
             var options = new Dictionary<string, object>
         {
-            { "name", myName }
+            { "name", myName },
+            { "customRoomName", string.IsNullOrEmpty(roomName) ? "default" : roomName }
         };
 
-            string roomToJoin = PlayerPrefs.GetString("RoomId", "");
-
-            if (!string.IsNullOrEmpty(roomToJoin))
-            {
-                try
-                {
-                    // ✅ PASS OPTIONS WHEN JOINING
-                    room = await client.JoinById<MyRoomState>(roomToJoin, options);
-                    Debug.Log("✓ Joined room: " + roomToJoin);
-                }
-                catch
-                {
-                    // ✅ PASS OPTIONS HERE TOO
-                    room = await client.JoinOrCreate<MyRoomState>("my_room", options);
-                    Debug.Log("✓ Created new room instead");
-                }
-            }
-            else
-            {
-                // ✅ PASS OPTIONS HERE TOO
-                room = await client.JoinOrCreate<MyRoomState>("my_room", options);
-                Debug.Log("✓ Quick play: Joined/Created room");
-            }
+            // ✅ ALWAYS USE JOINORCREATE - IT HANDLES BOTH CREATE AND JOIN
+            room = await client.JoinOrCreate<MyRoomState>("my_room", options);
 
             myPlayerId = room.SessionId;
-            Debug.Log("My Player ID: " + myPlayerId);
-            Debug.Log("My Name: " + myName);
-            Debug.Log("Room ID: " + room.Id);
+
+            Debug.Log($"✅ SUCCESS!");
+            Debug.Log($"   Session ID: {myPlayerId}");
+            Debug.Log($"   Room ID: {room.Id}");
+            Debug.Log($"   Room Name: {roomName}");
+            Debug.Log($"======================");
         }
         catch (System.Exception e)
         {
-            Debug.LogError("✗ Connection failed: " + e.Message);
+            Debug.LogError($"✗ CONNECTION FAILED!");
+            Debug.LogError($"   Error: {e.Message}");
+            Debug.LogError($"   Stack: {e.StackTrace}");
         }
     }
 

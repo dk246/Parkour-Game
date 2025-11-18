@@ -273,11 +273,12 @@ MonoBehaviour:
   playerTag: Player
   distance: 4
   height: 1.6
-  yawSpeed: 160
-  pitchSpeed: 80
+  yawSpeed: 220
+  pitchSpeed: 120
   minPitch: -30
   maxPitch: 60
-  smoothTime: 0.08
+  positionSmoothing: 0.04
+  rotationSmoothing: 0.02
 --- !u!64 &339052422
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -812,7 +813,7 @@ GameObject:
   - component: {fileID: 3469287837875994785}
   - component: {fileID: 1711813855224427627}
   - component: {fileID: 3469287837875994786}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: weapon-spear
   m_TagString: ground
   m_Icon: {fileID: 0}
@@ -831,7 +832,7 @@ GameObject:
   - component: {fileID: 3469287837918369736}
   - component: {fileID: 1711813855197651714}
   - component: {fileID: 1778876296}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: weapon-rack
   m_TagString: ground
   m_Icon: {fileID: 0}
@@ -850,7 +851,7 @@ GameObject:
   - component: {fileID: 3469287838630893957}
   - component: {fileID: 1711813854637174095}
   - component: {fileID: 1168060877}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: stairs
   m_TagString: ground
   m_Icon: {fileID: 0}
@@ -869,7 +870,7 @@ GameObject:
   - component: {fileID: 3469287838488090119}
   - component: {fileID: 1711813854762803917}
   - component: {fileID: 1276657227}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: tree (2)
   m_TagString: ground
   m_Icon: {fileID: 0}
@@ -888,7 +889,7 @@ GameObject:
   - component: {fileID: 3469287838414720265}
   - component: {fileID: 1711813854689376707}
   - component: {fileID: 1224254793}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: trophy
   m_TagString: ground
   m_Icon: {fileID: 0}
@@ -907,7 +908,7 @@ GameObject:
   - component: {fileID: 3469287838282683741}
   - component: {fileID: 1711813854288994711}
   - component: {fileID: 1356758293}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: wall
   m_TagString: ground
   m_Icon: {fileID: 0}
@@ -926,7 +927,7 @@ GameObject:
   - component: {fileID: 3469287837050189690}
   - component: {fileID: 1711813856208438192}
   - component: {fileID: 642244406}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: tree (1)
   m_TagString: ground
   m_Icon: {fileID: 0}
@@ -945,7 +946,7 @@ GameObject:
   - component: {fileID: 3469287837387801786}
   - component: {fileID: 1711813855740801136}
   - component: {fileID: 3469287837387801787}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: banner
   m_TagString: ground
   m_Icon: {fileID: 0}
@@ -964,7 +965,7 @@ GameObject:
   - component: {fileID: 3469287837277876170}
   - component: {fileID: 1711813855431564032}
   - component: {fileID: 339052422}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: tree
   m_TagString: ground
   m_Icon: {fileID: 0}
@@ -1624,7 +1625,7 @@ GameObject:
   - component: {fileID: 439554304974147526}
   - component: {fileID: 2449231447306451724}
   - component: {fileID: 4250720158043413210}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: ground
   m_TagString: ground
   m_Icon: {fileID: 0}
@@ -1664,7 +1665,7 @@ GameObject:
   - component: {fileID: 1819070692090436701}
   - component: {fileID: 13195166725430668}
   - component: {fileID: 1351973411794473476}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: Group
   m_TagString: Untagged
   m_Icon: {fileID: 0}

@@ -4,7 +4,6 @@ using UnityEngine;
 public class CameraController : MonoBehaviour
 {
     [Header("Target")]
-    // If left empty the camera will search for the GameObject tagged "Player"
     public Transform target;
     public string playerTag = "Player";
 
@@ -13,23 +12,29 @@ public class CameraController : MonoBehaviour
     public float height = 1.6f;
 
     [Header("Rotation")]
-    public float yawSpeed = 160f;   // horizontal mouse sensitivity
-    public float pitchSpeed = 80f;  // vertical mouse sensitivity
+    public float yawSpeed = 240f;   // Increased for faster horizontal rotation
+    public float pitchSpeed = 120f;  // Increased for faster vertical rotation
     public float minPitch = -30f;
     public float maxPitch = 60f;
 
     [Header("Smoothing")]
-    public float smoothTime = 0.08f;
+    public float positionSmoothing = 0.05f; // Faster position smoothing
+    public float rotationSmoothing = 0.08f; // Rotation smoothing
 
     private float yaw = 0f;
     private float pitch = 10f;
-    private Vector3 velocity = Vector3.zero;
+    private Vector3 positionVelocity = Vector3.zero;
+    private Vector3 rotationVelocity = Vector3.zero;
+    private Vector3 currentRotation;
 
     void Start()
     {
         if (target == null) TryFindPlayer();
 
-        // Optional: lock cursor for mouse look. Remove if you don't want this behavior.
+        // Initialize rotation
+        currentRotation = new Vector3(pitch, yaw, 0f);
+
+        // Optional: lock cursor
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
@@ -45,9 +50,10 @@ public class CameraController : MonoBehaviour
         if (target == null)
         {
             TryFindPlayer();
+            return;
         }
 
-        // Read mouse input
+        // Read mouse input with deltaTime for frame-rate independent rotation
         float mx = Input.GetAxis("Mouse X");
         float my = Input.GetAxis("Mouse Y");
 
@@ -60,16 +66,21 @@ public class CameraController : MonoBehaviour
     {
         if (target == null) return;
 
-        // Build rotation from yaw/pitch (camera does NOT follow player's rotation)
-        Quaternion rot = Quaternion.Euler(pitch, yaw, 0f);
+        // Smooth rotation for camera
+        Vector3 targetRotation = new Vector3(pitch, yaw, 0f);
+        currentRotation = Vector3.SmoothDamp(currentRotation, targetRotation, ref rotationVelocity, rotationSmoothing);
 
-        // Desired camera position: behind the target at the set distance and height
-        Vector3 desiredPosition = target.position + Vector3.up * height - (rot * Vector3.forward) * distance;
+        // Build rotation from smoothed yaw/pitch
+        Quaternion rot = Quaternion.Euler(currentRotation.x, currentRotation.y, 0f);
 
-        // Smooth position
-        transform.position = Vector3.SmoothDamp(transform.position, desiredPosition, ref velocity, smoothTime);
+        // Desired camera position
+        Vector3 targetPosition = target.position + Vector3.up * height;
+        Vector3 desiredPosition = targetPosition - (rot * Vector3.forward) * distance;
 
-        // Always look at the target (or use rotation directly so camera orientation matches yaw/pitch)
+        // Smooth position with faster smoothing
+        transform.position = Vector3.SmoothDamp(transform.position, desiredPosition, ref positionVelocity, positionSmoothing);
+
+        // Set camera rotation
         transform.rotation = rot;
     }
 }

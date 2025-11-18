@@ -20,6 +20,7 @@ public class MenuManager : MonoBehaviour
 
     [Header("Settings")]
     public string gameSceneName = "Game";
+    public string serverUrl = "wss://serverofcolyseus-production-c543.up.railway.app";
 
     void Start()
     {

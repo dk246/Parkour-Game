@@ -160,6 +160,11 @@ MonoBehaviour:
   moveSpeed: 3
   jumpForce: 6
   rotationSpeed: 15
+  movementSmoothing: 0.1
+  groundCheckDistance: 0.3
+  groundLayer:
+    serializedVersion: 2
+    m_Bits: 8
   cameraTransform: {fileID: 0}
   animator: {fileID: 4772345608264586357}
   rb: {fileID: 1599507390127545328}
