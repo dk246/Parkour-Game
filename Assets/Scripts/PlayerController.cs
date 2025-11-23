@@ -1,196 +1,324 @@
 using UnityEngine;
 
-[RequireComponent(typeof(Animator), typeof(Rigidbody))]
+[RequireComponent(typeof(Rigidbody))]
+//[RequireComponent(typeof(CapsuleCollider))]
 public class SimpleCharacterController : MonoBehaviour
 {
     [Header("Movement")]
-    public float moveSpeed = 3f;
-    public float jumpForce = 6f;
-    public float rotationSpeed = 20f; // Increased for snappier rotation
-    public float movementSmoothing = 0.1f;
+    public float moveSpeed = 5f;
+    public float acceleration = 25f;
+    public float rotationSpeed = 12f;
+    public bool disableAirControl = true;
+
+    [Header("Jump / Air")]
+    public float jumpVelocity = 7f;
+    public float fallMultiplier = 2.5f;
+    public float lowJumpMultiplier = 2f;
+    public float coyoteTime = 0.15f;
+    public float jumpBufferTime = 0.12f;
+    public float jumpGroundIgnoreTime = 0.2f;
 
     [Header("Ground Detection")]
-    public float groundCheckDistance = 0.3f;
-    public LayerMask groundLayer = -1;
+    public float groundCheckDistance = 0.12f;
+    public LayerMask groundLayer = ~0;
+    [Range(0f, 1f)]
+    public float minGroundNormalY = 0.65f;
+    public float groundHeightTolerance = 0.05f;
+
+    [Header("Landing confirmation")]
+    public float groundConfirmTime = 0.15f;
+    public float groundVelocityThreshold = 0.5f;
 
     [Header("References")]
     public Transform cameraTransform;
     public Animator animator;
-    public Rigidbody rb;
 
-    private Vector3 input;
-    private Vector3 targetInput;
-    private Vector3 smoothVelocity;
-    private Vector3 currentVelocity;
-    private Quaternion targetRotation;
-    private bool isGrounded = true;
-    private bool wasGrounded = true;
-    private bool jumpRequested = false;
+    // Core components
+    private Rigidbody rb;
+    private BoxCollider box;
+
+    // Movement
+    private Vector3 inputDirection;
+
+    // Ground state
+    private bool isGrounded;
+    private bool wasGrounded;
+
+    // Jump timers (kept as fields, but simplified logic below)
+    private float coyoteTimer;
+    private float jumpBufferTimer;
+    private float jumpGroundIgnoreTimer;
+    private float groundConfirmTimer;
+
+    // Jump flags
+    private bool hasJumped = false;
+    private bool wasInAir = false;
+
+    // Animation hashes
+    private int isWalkHash;
+    private int isJumpHash;
 
     void Awake()
     {
-        if (animator == null) animator = GetComponent<Animator>();
-        if (rb == null) rb = GetComponent<Rigidbody>();
-        if (cameraTransform == null && Camera.main != null) cameraTransform = Camera.main.transform;
+        // Cache components
+        rb = GetComponent<Rigidbody>();
+        //box = GetComponent<CapsuleCollider>();
 
-        // Ensure Rigidbody is set up for smooth movement
+        if (animator == null)
+            animator = GetComponent<Animator>();
+
+        if (cameraTransform == null && Camera.main != null)
+            cameraTransform = Camera.main.transform;
+
+        // Rigidbody setup - keep rotation locked for a character
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
         rb.constraints = RigidbodyConstraints.FreezeRotation;
+        rb.useGravity = true;
 
-        targetRotation = transform.rotation;
+        // Animator parameter hashes (optional but common practice)
+        isWalkHash = Animator.StringToHash("isWalk");
+        isJumpHash = Animator.StringToHash("isJump");
+
+        wasGrounded = true;
     }
 
     void Update()
     {
-        // Check ground with raycast for more reliable detection
-        CheckGroundStatus();
-
-        // Raw input from WASD/arrow keys
-        float h = Input.GetAxisRaw("Horizontal");
-        float v = Input.GetAxisRaw("Vertical");
-
-        // Convert input to camera-relative movement
-        if (cameraTransform != null)
-        {
-            Vector3 camForward = cameraTransform.forward;
-            camForward.y = 0f;
-            camForward.Normalize();
-            Vector3 camRight = cameraTransform.right;
-            camRight.y = 0f;
-            camRight.Normalize();
-            Vector3 camRelative = camRight * h + camForward * v;
-            targetInput = camRelative.magnitude > 1f ? camRelative.normalized : camRelative;
-        }
-        else
-        {
-            targetInput = new Vector3(h, 0f, v).normalized;
-        }
-
-        // Walk animation
-        bool isWalking = targetInput.magnitude > 0.01f;
-        if (animator != null) animator.SetBool("isWalk", isWalking);
-
-        // Update jump animation based on ground status
-        if (animator != null && wasGrounded != isGrounded)
-        {
-            animator.SetBool("isJump", !isGrounded);
-            wasGrounded = isGrounded;
-        }
-
-        // Calculate target rotation (but don't apply yet - will apply in FixedUpdate)
-        if (isWalking)
-        {
-            targetRotation = Quaternion.LookRotation(targetInput);
-        }
-
-        // Jump
-        if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
-        {
-            jumpRequested = true;
-        }
+        HandleInput();
+        UpdateTimers();
+        UpdateAnimations();
     }
 
     void FixedUpdate()
     {
-        // Smooth input for better movement feel
-        input = Vector3.Lerp(input, targetInput, movementSmoothing * 60f * Time.fixedDeltaTime);
+        // Simple ground check
+        if (jumpGroundIgnoreTimer > 0f)
+            jumpGroundIgnoreTimer -= Time.fixedDeltaTime;
 
-        // Smooth rotation in FixedUpdate to sync with movement
-        if (input.magnitude > 0.01f)
-        {
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.fixedDeltaTime);
-        }
+        CheckGround();
 
-        // Smooth movement using Vector3.SmoothDamp
-        Vector3 targetVelocity = input * moveSpeed;
-        currentVelocity = Vector3.SmoothDamp(currentVelocity, targetVelocity, ref smoothVelocity, movementSmoothing);
+        ApplyMovement();
+        ApplyRotation();
+        ProcessJumpPhysics();
+        ApplyBetterGravity();
 
-        // Move the player
-        if (rb != null)
-        {
-            Vector3 newPos = rb.position + currentVelocity * Time.fixedDeltaTime;
-            rb.MovePosition(newPos);
-        }
-
-        // Handle jump in FixedUpdate for consistent physics
-        if (jumpRequested)
-        {
-            Jump();
-            jumpRequested = false;
-        }
+        // Keep PreventWallSticking function present but simplified for beginners
+        if (!isGrounded && jumpGroundIgnoreTimer > 0f)
+            PreventWallSticking();
     }
 
-    void CheckGroundStatus()
+    void HandleInput()
     {
-        // Raycast downward to check ground
-        RaycastHit hit;
-        Vector3 rayOrigin = transform.position + Vector3.up * 0.1f;
+        float h = SimpleInput.GetAxisRaw("Horizontal");
+        float v = SimpleInput.GetAxisRaw("Vertical");
 
-        if (Physics.Raycast(rayOrigin, Vector3.down, out hit, groundCheckDistance, groundLayer))
+        // Convert input into world direction (relative to camera if available)
+        if (cameraTransform != null)
         {
-            if (hit.normal.y > 0.5f)
-            {
-                isGrounded = true;
-                return;
-            }
-        }
+            Vector3 forward = cameraTransform.forward;
+            Vector3 right = cameraTransform.right;
 
-        // Additional sphere check for better detection on edges
-        if (Physics.CheckSphere(transform.position, 0.2f, groundLayer))
-        {
-            isGrounded = true;
+            forward.y = 0f;
+            right.y = 0f;
+            forward.Normalize();
+            right.Normalize();
+
+            inputDirection = right * h + forward * v;
         }
         else
         {
-            isGrounded = false;
+            inputDirection = new Vector3(h, 0f, v);
+        }
+
+        if (inputDirection.magnitude > 1f)
+            inputDirection.Normalize();
+
+        // Simple jump input handling: set jump buffer timer so FixedUpdate can pick it up
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            jumpBufferTimer = jumpBufferTime;
+
+            if (animator != null)
+                animator.SetBool(isJumpHash, true);
         }
     }
 
-    void Jump()
+    void UpdateTimers()
     {
-        if (rb == null) return;
+        // Keep simple timers (these exist but behavior is simplified)
+        if (coyoteTimer > 0f)
+            coyoteTimer -= Time.deltaTime;
 
-        // Reset vertical velocity before jumping for consistent jump height
-        Vector3 vel = rb.linearVelocity;
-        vel.y = 0f;
-        rb.linearVelocity = vel;
+        if (jumpBufferTimer > 0f)
+            jumpBufferTimer -= Time.deltaTime;
+    }
 
-        rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+    void CheckGround()
+    {
+        // Simpler ground check: cast a short ray down from the character position
+        Vector3 origin = transform.position + Vector3.up * 0.1f;
+        float checkDistance = groundCheckDistance + 0.1f;
+        RaycastHit hit;
+        bool hitGround = Physics.Raycast(origin, Vector3.down, out hit, checkDistance, groundLayer, QueryTriggerInteraction.Ignore);
+
+        if (hitGround)
+        {
+            // Ensure the surface is not too steep
+            if (hit.normal.y < minGroundNormalY)
+                hitGround = false;
+        }
+
+        wasGrounded = isGrounded;
+        isGrounded = hitGround;
+
+        if (isGrounded)
+        {
+            // Reset jump flag so player can jump again after landing
+            hasJumped = false;
+            coyoteTimer = coyoteTime;
+        }
+
+        // Keep simple animator update
+        if (animator != null && wasGrounded != isGrounded)
+            animator.SetBool(isJumpHash, !isGrounded);
+    }
+
+    void ApplyMovement()
+    {
+        // Optionally prevent air control (simple check)
+        if (disableAirControl && !isGrounded)
+            return;
+
+        Vector3 currentVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+        Vector3 targetVel = inputDirection * moveSpeed;
+
+        float lerpAmount = Mathf.Clamp01(acceleration * Time.fixedDeltaTime);
+        Vector3 newVel = Vector3.Lerp(currentVel, targetVel, lerpAmount);
+
+        rb.linearVelocity = new Vector3(newVel.x, rb.linearVelocity.y, newVel.z);
+    }
+
+    void ApplyRotation()
+    {
+        if (inputDirection.magnitude > 0.01f)
+        {
+            Quaternion targetRot = Quaternion.LookRotation(inputDirection);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, rotationSpeed * Time.fixedDeltaTime);
+        }
+    }
+
+    void ProcessJumpPhysics()
+    {
+        // Very simple jump condition: if jump was pressed recently and we're grounded
+        bool canJump = jumpBufferTimer > 0f && isGrounded && !hasJumped;
+        if (canJump)
+        {
+            DoJump();
+        }
+    }
+
+    void DoJump()
+    {
+        // Reset vertical velocity for consistent jumps
+        Vector3 v = rb.linearVelocity;
+        v.y = 0f;
+        rb.linearVelocity = v;
+
+        rb.linearVelocity = new Vector3(rb.linearVelocity.x, jumpVelocity, rb.linearVelocity.z);
+
+        // Basic jump state updates
+        hasJumped = true;
+        jumpBufferTimer = 0f;
+        coyoteTimer = 0f;
         isGrounded = false;
-        wasGrounded = false;
 
-        if (animator != null) animator.SetBool("isJump", true);
+        if (animator != null)
+        {
+            animator.SetBool(isJumpHash, true);
+            animator.SetBool(isWalkHash, false);
+        }
     }
 
-    private void OnCollisionStay(Collision collision)
+    void ApplyBetterGravity()
     {
-        if (collision.gameObject.CompareTag("ground"))
+        // Apply a bit more gravity when falling so jumps feel snappier.
+        // This is kept simple for beginners.
+        if (rb.linearVelocity.y < 0f)
         {
-            foreach (ContactPoint contact in collision.contacts)
+            Vector3 extraGravity = Vector3.up * (Physics.gravity.y * (fallMultiplier - 1f));
+            rb.AddForce(extraGravity * rb.mass, ForceMode.Force);
+        }
+        else if (rb.linearVelocity.y > 0f && !Input.GetKey(KeyCode.Space))
+        {
+            // Optional: make releasing jump earlier produce a shorter jump
+            Vector3 extraGravity = Vector3.up * (Physics.gravity.y * (lowJumpMultiplier - 1f));
+            rb.AddForce(extraGravity * rb.mass, ForceMode.Force);
+        }
+    }
+
+    // Kept as a simple stub so function names stay the same for any external calls.
+    void PreventWallSticking()
+    {
+        // Beginner-friendly version: do nothing special here.
+        // Complex logic removed to keep code simple.
+    }
+
+    void UpdateAnimations()
+    {
+        if (animator == null) return;
+
+        bool isMoving = inputDirection.magnitude > 0.01f;
+        bool hasVerticalMotion = Mathf.Abs(rb.linearVelocity.y) > 0.15f;
+        bool shouldWalk = isGrounded && !hasVerticalMotion && isMoving;
+
+        animator.SetBool(isWalkHash, shouldWalk);
+        animator.SetBool(isJumpHash, !isGrounded);
+    }
+
+    void OnCollisionEnter(Collision collision)
+    {
+        // Simple ground collision check: if contact normal is mostly up, consider grounded
+        if (((1 << collision.gameObject.layer) & groundLayer) == 0) return;
+
+        foreach (ContactPoint contact in collision.contacts)
+        {
+            if (contact.normal.y > minGroundNormalY)
             {
-                if (contact.normal.y > 0.5f)
-                {
-                    isGrounded = true;
-                    return;
-                }
+                isGrounded = true;
+                if (animator != null)
+                    animator.SetBool(isJumpHash, false);
+                break;
             }
         }
     }
 
-    private void OnCollisionEnter(Collision collision)
+    void OnCollisionStay(Collision collision)
     {
-        if (collision.gameObject.CompareTag("ground"))
+        if (((1 << collision.gameObject.layer) & groundLayer) == 0) return;
+
+        foreach (ContactPoint contact in collision.contacts)
         {
-            foreach (ContactPoint contact in collision.contacts)
+            if (contact.normal.y > minGroundNormalY)
             {
-                if (contact.normal.y > 0.5f)
-                {
-                    isGrounded = true;
-                    if (animator != null) animator.SetBool("isJump", false);
-                    return;
-                }
+                isGrounded = true;
+                break;
             }
         }
     }
+
+    // ---------------------------
+    // UI integration
+    // ---------------------------
+
+    // Public method you can wire to a Unity UI Button (OnClick) to trigger a jump.
+    // Using the button will set the jump buffer just like pressing Space.
+    public void OnJumpButton()
+    {
+        jumpBufferTimer = jumpBufferTime;
+        if (animator != null)
+            animator.SetBool(isJumpHash, true);
+    }
+
+
 }
