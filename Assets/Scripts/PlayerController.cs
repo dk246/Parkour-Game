@@ -1,7 +1,6 @@
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
-//[RequireComponent(typeof(CapsuleCollider))]
 public class SimpleCharacterController : MonoBehaviour
 {
     [Header("Movement")]
@@ -16,53 +15,37 @@ public class SimpleCharacterController : MonoBehaviour
     public float lowJumpMultiplier = 2f;
     public float coyoteTime = 0.15f;
     public float jumpBufferTime = 0.12f;
-    public float jumpGroundIgnoreTime = 0.2f;
 
     [Header("Ground Detection")]
     public float groundCheckDistance = 0.12f;
     public LayerMask groundLayer = ~0;
     [Range(0f, 1f)]
     public float minGroundNormalY = 0.65f;
-    public float groundHeightTolerance = 0.05f;
-
-    [Header("Landing confirmation")]
-    public float groundConfirmTime = 0.15f;
-    public float groundVelocityThreshold = 0.5f;
 
     [Header("References")]
     public Transform cameraTransform;
     public Animator animator;
 
-    // Core components
+    // Core component
     private Rigidbody rb;
-    private BoxCollider box;
 
     // Movement
     private Vector3 inputDirection;
 
-    // Ground state
+    // Ground & jump state
     private bool isGrounded;
     private bool wasGrounded;
-
-    // Jump timers (kept as fields, but simplified logic below)
     private float coyoteTimer;
     private float jumpBufferTimer;
-    private float jumpGroundIgnoreTimer;
-    private float groundConfirmTimer;
-
-    // Jump flags
     private bool hasJumped = false;
-    private bool wasInAir = false;
 
-    // Animation hashes
+    // Animator hashes (optional but faster than string lookups)
     private int isWalkHash;
     private int isJumpHash;
 
     void Awake()
     {
-        // Cache components
         rb = GetComponent<Rigidbody>();
-        //box = GetComponent<CapsuleCollider>();
 
         if (animator == null)
             animator = GetComponent<Animator>();
@@ -70,13 +53,12 @@ public class SimpleCharacterController : MonoBehaviour
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
 
-        // Rigidbody setup - keep rotation locked for a character
+        // Rigidbody settings appropriate for a physics-driven character
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
         rb.constraints = RigidbodyConstraints.FreezeRotation;
         rb.useGravity = true;
 
-        // Animator parameter hashes (optional but common practice)
         isWalkHash = Animator.StringToHash("isWalk");
         isJumpHash = Animator.StringToHash("isJump");
 
@@ -92,20 +74,11 @@ public class SimpleCharacterController : MonoBehaviour
 
     void FixedUpdate()
     {
-        // Simple ground check
-        if (jumpGroundIgnoreTimer > 0f)
-            jumpGroundIgnoreTimer -= Time.fixedDeltaTime;
-
         CheckGround();
-
         ApplyMovement();
         ApplyRotation();
         ProcessJumpPhysics();
         ApplyBetterGravity();
-
-        // Keep PreventWallSticking function present but simplified for beginners
-        if (!isGrounded && jumpGroundIgnoreTimer > 0f)
-            PreventWallSticking();
     }
 
     void HandleInput()
@@ -118,12 +91,10 @@ public class SimpleCharacterController : MonoBehaviour
         {
             Vector3 forward = cameraTransform.forward;
             Vector3 right = cameraTransform.right;
-
             forward.y = 0f;
             right.y = 0f;
             forward.Normalize();
             right.Normalize();
-
             inputDirection = right * h + forward * v;
         }
         else
@@ -134,11 +105,10 @@ public class SimpleCharacterController : MonoBehaviour
         if (inputDirection.magnitude > 1f)
             inputDirection.Normalize();
 
-        // Simple jump input handling: set jump buffer timer so FixedUpdate can pick it up
+        // Jump input -> set jump buffer (read in FixedUpdate)
         if (Input.GetKeyDown(KeyCode.Space))
         {
             jumpBufferTimer = jumpBufferTime;
-
             if (animator != null)
                 animator.SetBool(isJumpHash, true);
         }
@@ -146,7 +116,6 @@ public class SimpleCharacterController : MonoBehaviour
 
     void UpdateTimers()
     {
-        // Keep simple timers (these exist but behavior is simplified)
         if (coyoteTimer > 0f)
             coyoteTimer -= Time.deltaTime;
 
@@ -156,37 +125,29 @@ public class SimpleCharacterController : MonoBehaviour
 
     void CheckGround()
     {
-        // Simpler ground check: cast a short ray down from the character position
         Vector3 origin = transform.position + Vector3.up * 0.1f;
         float checkDistance = groundCheckDistance + 0.1f;
         RaycastHit hit;
         bool hitGround = Physics.Raycast(origin, Vector3.down, out hit, checkDistance, groundLayer, QueryTriggerInteraction.Ignore);
 
-        if (hitGround)
-        {
-            // Ensure the surface is not too steep
-            if (hit.normal.y < minGroundNormalY)
-                hitGround = false;
-        }
+        if (hitGround && hit.normal.y < minGroundNormalY)
+            hitGround = false;
 
         wasGrounded = isGrounded;
         isGrounded = hitGround;
 
         if (isGrounded)
         {
-            // Reset jump flag so player can jump again after landing
             hasJumped = false;
             coyoteTimer = coyoteTime;
         }
 
-        // Keep simple animator update
         if (animator != null && wasGrounded != isGrounded)
             animator.SetBool(isJumpHash, !isGrounded);
     }
 
     void ApplyMovement()
     {
-        // Optionally prevent air control (simple check)
         if (disableAirControl && !isGrounded)
             return;
 
@@ -210,28 +171,27 @@ public class SimpleCharacterController : MonoBehaviour
 
     void ProcessJumpPhysics()
     {
-        // Very simple jump condition: if jump was pressed recently and we're grounded
-        bool canJump = jumpBufferTimer > 0f && isGrounded && !hasJumped;
-        if (canJump)
+        bool canUseCoyote = coyoteTimer > 0f;
+        bool bufferedJump = jumpBufferTimer > 0f;
+
+        if (bufferedJump && (isGrounded || canUseCoyote) && !hasJumped)
         {
             DoJump();
+            jumpBufferTimer = 0f;
         }
     }
 
     void DoJump()
     {
-        // Reset vertical velocity for consistent jumps
         Vector3 v = rb.linearVelocity;
         v.y = 0f;
         rb.linearVelocity = v;
 
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, jumpVelocity, rb.linearVelocity.z);
 
-        // Basic jump state updates
         hasJumped = true;
-        jumpBufferTimer = 0f;
-        coyoteTimer = 0f;
         isGrounded = false;
+        coyoteTimer = 0f;
 
         if (animator != null)
         {
@@ -242,8 +202,6 @@ public class SimpleCharacterController : MonoBehaviour
 
     void ApplyBetterGravity()
     {
-        // Apply a bit more gravity when falling so jumps feel snappier.
-        // This is kept simple for beginners.
         if (rb.linearVelocity.y < 0f)
         {
             Vector3 extraGravity = Vector3.up * (Physics.gravity.y * (fallMultiplier - 1f));
@@ -251,17 +209,9 @@ public class SimpleCharacterController : MonoBehaviour
         }
         else if (rb.linearVelocity.y > 0f && !Input.GetKey(KeyCode.Space))
         {
-            // Optional: make releasing jump earlier produce a shorter jump
             Vector3 extraGravity = Vector3.up * (Physics.gravity.y * (lowJumpMultiplier - 1f));
             rb.AddForce(extraGravity * rb.mass, ForceMode.Force);
         }
-    }
-
-    // Kept as a simple stub so function names stay the same for any external calls.
-    void PreventWallSticking()
-    {
-        // Beginner-friendly version: do nothing special here.
-        // Complex logic removed to keep code simple.
     }
 
     void UpdateAnimations()
@@ -276,49 +226,14 @@ public class SimpleCharacterController : MonoBehaviour
         animator.SetBool(isJumpHash, !isGrounded);
     }
 
-    void OnCollisionEnter(Collision collision)
-    {
-        // Simple ground collision check: if contact normal is mostly up, consider grounded
-        if (((1 << collision.gameObject.layer) & groundLayer) == 0) return;
-
-        foreach (ContactPoint contact in collision.contacts)
-        {
-            if (contact.normal.y > minGroundNormalY)
-            {
-                isGrounded = true;
-                if (animator != null)
-                    animator.SetBool(isJumpHash, false);
-                break;
-            }
-        }
-    }
-
-    void OnCollisionStay(Collision collision)
-    {
-        if (((1 << collision.gameObject.layer) & groundLayer) == 0) return;
-
-        foreach (ContactPoint contact in collision.contacts)
-        {
-            if (contact.normal.y > minGroundNormalY)
-            {
-                isGrounded = true;
-                break;
-            }
-        }
-    }
-
-    // ---------------------------
-    // UI integration
-    // ---------------------------
-
-    // Public method you can wire to a Unity UI Button (OnClick) to trigger a jump.
-    // Using the button will set the jump buffer just like pressing Space.
+    // UI-friendly jump trigger (can be wired to a Button OnClick)
     public void OnJumpButton()
     {
-        jumpBufferTimer = jumpBufferTime;
-        if (animator != null)
-            animator.SetBool(isJumpHash, true);
+        bool canUseCoyote = coyoteTimer > 0f;
+
+        if ((isGrounded || canUseCoyote) && !hasJumped)
+        {
+            DoJump();
+        }
     }
-
-
 }

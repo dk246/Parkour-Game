@@ -32,17 +32,15 @@ public class TabFocusManager : MonoBehaviour
         // This is called when player switches tabs or windows
         if (!hasFocus)
         {
-            // Player left the tab - show pause panel
             ShowPausePanel();
         }
     }
 
     void Update()
     {
-        // Check if ESC key is pressed
+
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            // Toggle pause panel
             if (isPaused)
             {
                 ResumeGame();
@@ -62,17 +60,15 @@ public class TabFocusManager : MonoBehaviour
 
     void ShowPausePanel()
     {
-        // Show the click to start panel
         if (clickToStartPanel != null)
         {
             clickToStartPanel.SetActive(true);
         }
 
-        // Pause the game
         Time.timeScale = 0f;
         isPaused = true;
 
-        // Unlock cursor so player can click
+
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
     }

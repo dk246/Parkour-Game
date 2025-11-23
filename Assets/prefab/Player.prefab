@@ -100,6 +100,7 @@ GameObject:
   - component: {fileID: 1599507390127545328}
   - component: {fileID: 8435121556697032440}
   - component: {fileID: -638529163967862883}
+  - component: {fileID: 6903783475369528078}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -249,6 +250,32 @@ CapsuleCollider:
   m_Height: 2.7227557
   m_Direction: 1
   m_Center: {x: 0.026530743, y: 1.3684088, z: 0}
+--- !u!114 &6903783475369528078
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 978792316320803901}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6698ea8b01122184183ab7ed20e9d457, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  meshRenderers:
+  - {fileID: 5063845457488734733}
+  - {fileID: 8945126576533686183}
+  - {fileID: 6133284231534958373}
+  - {fileID: 6575972258922690200}
+  - {fileID: 4804136875984338580}
+  - {fileID: 977351627290737498}
+  skinMaterials:
+  - {fileID: 1744488006727437020, guid: 754d399c7560e5d4b8c96d1a450d2f02, type: 3}
+  - {fileID: -61013220376785778, guid: 6241a28d046c7f4499175c1ee48d579a, type: 3}
+  - {fileID: -947819958822077965, guid: 36f6a5beaca43eb45824597d4f091b8c, type: 3}
+  - {fileID: 3497925433424801257, guid: 0a941c25891a03144b2f3113e572ec21, type: 3}
+  - {fileID: -3108034842107755009, guid: 9ecbd152fe04fd54bbce7d274db1fec8, type: 3}
+  currentSkinId: -1
 --- !u!1 &2247676012495117451
 GameObject:
   m_ObjectHideFlags: 0

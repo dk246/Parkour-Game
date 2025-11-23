@@ -1,4 +1,4 @@
-using Colyseus.Schema;
+﻿using Colyseus.Schema;
 using System.Collections.Generic;
 
 public class Player : Schema
@@ -12,7 +12,6 @@ public class Player : Schema
     [Type(2, "number")]
     public float z = 0;
 
-
     [Type(3, "number")]
     public float rotY = 0;
 
@@ -24,6 +23,9 @@ public class Player : Schema
 
     [Type(6, "string")]
     public string name = "Player";
+
+    [Type(7, "number")]
+    public float skinId = 0;
 }
 
 public class MyRoomState : Schema
